@@ -2,6 +2,9 @@
 
 This CLI utility can be used in automation systems to upload a given file to an S3 bucket
 
+## 📦 Download
+Download the latest version [here](https://github.com/c0der4t/S3CLI/releases/latest)
+
 ## ⚠️ Security Considerations
 
 - Reference the "Usage" section: The API key and secret is passed to the S3 CLI utility in **PLAIN TEXT**. This is fine for on demand requests, however this presents issues if used in a system that logs the command in plain text as well.
@@ -9,6 +12,10 @@ This CLI utility can be used in automation systems to upload a given file to an 
 - This utility uses the external Amazon S3 SDK to interact with S3 storage.
 
 ## Usage
+
+1. Download the latest version of the utility.
+2. Extract the ZIP file
+3. From a console like CMD / PowerShell, use the CLI command as illustrated below
 
 .\S3CLI.exe -bucket testbucket -url "https://s3.eu-west-1.wasabisys.com" -key aaaaaaaaaaaaa -secret bbbbbbbbbbbbbb -file "C:\temp\test.txt" [-s3Path testfolder/]
 
