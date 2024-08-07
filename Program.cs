@@ -4,6 +4,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using System.Diagnostics;
 using System.Runtime.InteropServices.JavaScript;
+using System.Text;
 
 namespace S3CLI
 {
@@ -41,6 +42,9 @@ namespace S3CLI
                     case "-S3PATH":
                         s3path = args[counter + 1];
                         break;
+                    case "-HELP":
+                        Console.Write(generateHelpOutput());
+                        return;
                     default:
                         break;
                 }
@@ -60,18 +64,26 @@ namespace S3CLI
                     s3path = "/";
                 }
 
-              await UploadFileToS3(filepath, url, bucket, key, secret, s3path);
-              Console.WriteLine("Uploaded File");
+                try
+                {
+                    await UploadFileToS3(filepath, url, bucket, key, secret, s3path);
+                    Console.WriteLine($"Uploaded File: {filepath}");
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"{e.Message}");
+                }
+                
             }
             else
             {
-                Console.WriteLine("Not all parameters were provided. Required: URL, BUCKET, KEY, SECRET, FILE");
+                Console.WriteLine("Not all parameters were provided. Required: -url, -bucket, -key, -secret, -file\nUse -help for usage");
             }
         }
 
         private static string ToS3Path(string NTFSPath)
         {
-            return NTFSPath.Replace("\\", "/").Replace("//","/");
+            return NTFSPath.Replace("\\", "/").Replace("//", "/");
         }
 
         private static async Task UploadFileToS3(string filePath, string s3Host, string s3BucketName, string s3AccessKey, string s3SecureKey, string s3Path = "/")
@@ -95,16 +107,33 @@ namespace S3CLI
                 try
                 {
                     await s3Client.PutObjectAsync(request);
-
-                    Debug.WriteLine($"Uploaded {filePath}");
                 }
                 catch (Exception putException)
                 {
-                    Debug.WriteLine($"Upload Failed {filePath}" +
-                        $" ({putException.Message})");
+                    throw new Exception($"Upload Failed {filePath} ({putException.Message})");
                 }
             }
 
+        }
+
+        private static string generateHelpOutput() {
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("\n\nS3CLI Help");
+            sb.AppendLine("===========================");
+            sb.AppendLine("This CLI utility can be used in automation systems to upload a given file to an S3 bucket");
+            sb.AppendLine("This is an open source project. See https://github.com/c0der4t/S3CLI");
+            sb.AppendLine();
+            sb.AppendLine("Usage:");
+            sb.AppendLine(".\\S3CLI.exe -bucket testbucket -url \"https://s3.eu-west-1.wasabisys.com\" -key aaaaaaaaaaaaa -secret bbbbbbbbbbbbbb -file \"C:\\temp\\test.txt\" [-s3Path testfolder/]");
+            sb.AppendLine("\tbucket\tThe name of the bucket to target in the upload");
+            sb.AppendLine("\turl\tThe endpoint of your S3 provider");
+            sb.AppendLine("\tkey\tThe API user key for your s3 provider");
+            sb.AppendLine("\tsecret\tThe API secret key for your s3 provider");
+            sb.AppendLine("\tfile\tThe full path to the file you would like to upload (folders are not supported yet)");
+            sb.AppendLine("\ts3Path\t[OPTIONAL] If you'd like to put the file in a specific location in S3, define it here. This defaults to '/'");
+            sb.AppendLine("\n\n");
+            return sb.ToString();
         }
 
     }
