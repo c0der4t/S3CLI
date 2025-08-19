@@ -67,13 +67,12 @@ namespace S3CLI
                 try
                 {
                     await UploadFileToS3(filepath, url, bucket, key, secret, s3path);
-                    Console.WriteLine($"Uploaded File: {filepath}");
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine($"{e.Message}");
                 }
-                
+
             }
             else
             {
@@ -94,7 +93,12 @@ namespace S3CLI
 
             using (var objectDataStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
             {
-                Debug.WriteLine($"{filePath}");
+
+                var fileInfo = new FileInfo(filePath);
+                var totalBytes = fileInfo.Length;
+                var fileName = Path.GetFileName(filePath);
+
+                Console.WriteLine($"Starting upload: {fileName} ({FormatBytes(totalBytes)})");
 
                 PutObjectRequest request;
                 request = new PutObjectRequest
@@ -104,9 +108,52 @@ namespace S3CLI
                     InputStream = objectDataStream
                 };
 
+
+                #region Set up progress tracking
+
+                var lastUpdate = DateTime.Now;
+                var startTime = DateTime.Now;
+
+                request.StreamTransferProgress += (sender, args) =>
+                {
+                    var now = DateTime.Now;
+
+                    //Prevent excessive updates on screen
+                    if ((now - lastUpdate).TotalMilliseconds < 100) return;
+
+
+                    lastUpdate = now;
+
+                    var percentComplete = (double)args.TransferredBytes / totalBytes * 100;
+                    var elapsed = now - startTime;
+                    var speed = args.TransferredBytes / elapsed.TotalSeconds;
+                    var eta = TimeSpan.FromSeconds((totalBytes - args.TransferredBytes) / speed);
+
+                    var progressWidth = 30;
+                    var progress = (int)(percentComplete / 100 * progressWidth);
+                    var progressBar = new string('█', progress) + new string('░', progressWidth - progress);
+
+                    Console.Write($"\r[{progressBar}] {percentComplete:F1}% " +
+                                 $"{FormatBytes(args.TransferredBytes)}/{FormatBytes(totalBytes)} " +
+                                 $"({FormatBytes((long)speed)}/s, ETA: {eta:mm\\:ss})");
+                };
+
+
+                #endregion
+
                 try
                 {
                     await s3Client.PutObjectAsync(request);
+
+                    var progressWidth = 30;
+                    var progress = (int)(100 / 100 * progressWidth);
+                    var progressBar = new string('█', progress) + new string('░', progressWidth - progress);
+
+                    Console.Write($"\r[{progressBar}] {100:F1}% " +
+                                 $"{FormatBytes(totalBytes)}/{FormatBytes(totalBytes)} " +
+                                 $"({FormatBytes((long)0)}/s, ETA: {0:mm\\:ss})");
+
+                    Console.WriteLine($"\nUploaded File: {fileName} ({FormatBytes(totalBytes)})");
                 }
                 catch (Exception putException)
                 {
@@ -116,7 +163,8 @@ namespace S3CLI
 
         }
 
-        private static string generateHelpOutput() {
+        private static string generateHelpOutput()
+        {
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("\n\nS3CLI Help");
@@ -134,6 +182,20 @@ namespace S3CLI
             sb.AppendLine("\ts3Path\t[OPTIONAL] If you'd like to put the file in a specific location in S3, define it here. This defaults to '/'");
             sb.AppendLine("\n\n");
             return sb.ToString();
+        }
+
+
+        private static string FormatBytes(long bytes)
+        {
+            string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+            int counter = 0;
+            decimal number = bytes;
+            while (Math.Round(number / 1024) >= 1)
+            {
+                number /= 1024;
+                counter++;
+            }
+            return $"{number:n1} {suffixes[counter]}";
         }
 
     }
