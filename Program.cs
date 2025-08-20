@@ -2,6 +2,7 @@
 using Amazon.Runtime.Internal;
 using Amazon.S3;
 using Amazon.S3.Model;
+using Amazon.S3.Transfer;
 using System.Diagnostics;
 using System.Runtime.InteropServices.JavaScript;
 using System.Text;
@@ -90,75 +91,71 @@ namespace S3CLI
             var config = new AmazonS3Config { ServiceURL = s3Host };
             var s3Credentials = new BasicAWSCredentials(s3AccessKey, s3SecureKey);
             AmazonS3Client s3Client = new AmazonS3Client(s3Credentials, config);
+            using var s3TransferUtil = new TransferUtility(s3Client);
 
-            using (var objectDataStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+            var fileInfo = new FileInfo(filePath);
+            var totalBytes = fileInfo.Length;
+            var fileName = Path.GetFileName(filePath);
+
+            Console.WriteLine($"Starting upload: {fileName} ({FormatBytes(totalBytes)})");
+
+            var request = new TransferUtilityUploadRequest
             {
-
-                var fileInfo = new FileInfo(filePath);
-                var totalBytes = fileInfo.Length;
-                var fileName = Path.GetFileName(filePath);
-
-                Console.WriteLine($"Starting upload: {fileName} ({FormatBytes(totalBytes)})");
-
-                PutObjectRequest request;
-                request = new PutObjectRequest
-                {
-                    BucketName = s3BucketName,
-                    Key = ToS3Path(string.Concat(s3Path, "/", Path.GetFileName(filePath))),
-                    InputStream = objectDataStream
-                };
+                BucketName = s3BucketName,
+                Key = ToS3Path(string.Concat(s3Path, "/", Path.GetFileName(filePath))),
+                FilePath = filePath
+            };
 
 
-                #region Set up progress tracking
+            #region Set up progress tracking
 
-                var lastUpdate = DateTime.Now;
-                var startTime = DateTime.Now;
+            var lastUpdate = DateTime.Now;
+            var startTime = DateTime.Now;
 
-                request.StreamTransferProgress += (sender, args) =>
-                {
-                    var now = DateTime.Now;
+            request.UploadProgressEvent+= (sender, args) =>
+            {
+                var now = DateTime.Now;
 
-                    //Prevent excessive updates on screen
-                    if ((now - lastUpdate).TotalMilliseconds < 100) return;
-
-
-                    lastUpdate = now;
-
-                    var percentComplete = (double)args.TransferredBytes / totalBytes * 100;
-                    var elapsed = now - startTime;
-                    var speed = args.TransferredBytes / elapsed.TotalSeconds;
-                    var eta = TimeSpan.FromSeconds((totalBytes - args.TransferredBytes) / speed);
-
-                    var progressWidth = 30;
-                    var progress = (int)(percentComplete / 100 * progressWidth);
-                    var progressBar = new string('█', progress) + new string('░', progressWidth - progress);
-
-                    Console.Write($"\r[{progressBar}] {percentComplete:F1}% " +
-                                 $"{FormatBytes(args.TransferredBytes)}/{FormatBytes(totalBytes)} " +
-                                 $"({FormatBytes((long)speed)}/s, ETA: {eta:mm\\:ss})");
-                };
+                //Prevent excessive updates on screen
+                if ((now - lastUpdate).TotalMilliseconds < 100) return;
 
 
-                #endregion
+                lastUpdate = now;
 
-                try
-                {
-                    await s3Client.PutObjectAsync(request);
+                var percentComplete = (double)args.TransferredBytes / totalBytes * 100;
+                var elapsed = now - startTime;
+                var speed = args.TransferredBytes / elapsed.TotalSeconds;
+                var eta = TimeSpan.FromSeconds((totalBytes - args.TransferredBytes) / speed);
 
-                    var progressWidth = 30;
-                    var progress = (int)(100 / 100 * progressWidth);
-                    var progressBar = new string('█', progress) + new string('░', progressWidth - progress);
+                var progressWidth = 30;
+                var progress = (int)(percentComplete / 100 * progressWidth);
+                var progressBar = new string('█', progress) + new string('░', progressWidth - progress);
 
-                    Console.Write($"\r[{progressBar}] {100:F1}% " +
-                                 $"{FormatBytes(totalBytes)}/{FormatBytes(totalBytes)} " +
-                                 $"({FormatBytes((long)0)}/s, ETA: {0:mm\\:ss})");
+                Console.Write($"\r[{progressBar}] {percentComplete:F1}% " +
+                             $"{FormatBytes(args.TransferredBytes)}/{FormatBytes(totalBytes)} " +
+                             $"({FormatBytes((long)speed)}/s, ETA: {eta:mm\\:ss})");
+            };
 
-                    Console.WriteLine($"\nUploaded File: {fileName} ({FormatBytes(totalBytes)})");
-                }
-                catch (Exception putException)
-                {
-                    throw new Exception($"Upload Failed {filePath} ({putException.Message})");
-                }
+
+            #endregion
+
+            try
+            {
+                await s3TransferUtil.UploadAsync(request);
+
+                var progressWidth = 30;
+                var progress = (int)(100 / 100 * progressWidth);
+                var progressBar = new string('█', progress) + new string('░', progressWidth - progress);
+
+                Console.Write($"\r[{progressBar}] {100:F1}% " +
+                             $"{FormatBytes(totalBytes)}/{FormatBytes(totalBytes)} " +
+                             $"({FormatBytes((long)0)}/s, ETA: {0:mm\\:ss})");
+
+                Console.WriteLine($"\nUploaded File: {fileName} ({FormatBytes(totalBytes)})");
+            }
+            catch (Exception putException)
+            {
+                throw new Exception($"Upload Failed {filePath} ({putException.Message})");
             }
 
         }
